@@ -195,11 +195,20 @@ $(CONTROLLER_GEN):
 controller-gen: $(CONTROLLER_GEN)  ## Download controller-gen locally if necessary.
 
 KUSTOMIZE = $(PROJECT_PATH)/bin/kustomize
+KUSTOMIZE_VERSION = v5@v5.3.0
 $(KUSTOMIZE):
-	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v4@v4.5.5)
+	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/$(KUSTOMIZE_VERSION))
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
+
+HELM = $(PROJECT_PATH)/bin/helm
+HELM_VERSION = v3.14.0
+$(HELM):
+	$(call go-install-tool,$(HELM),helm.sh/helm/v3/cmd/helm@$(HELM_VERSION))
+
+.PHONY: helm
+helm: $(HELM) ## Download helm locally if necessary.
 
 YQ=$(PROJECT_PATH)/bin/yq
 YQ_VERSION := v4.34.2

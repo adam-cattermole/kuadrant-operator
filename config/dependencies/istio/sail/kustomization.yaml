@@ -1,4 +1,6 @@
 ---
 namespace: istio-system
-resources:
-- github.com/maistra/istio-operator/config/default?ref=maistra-3.0
+helmCharts:
+  - name: istio-operator
+    repo: https://raw.githubusercontent.com/maistra/istio-operator/maistra-3.0/chart
+    version: 0.1.0
