@@ -12,8 +12,13 @@ EOF
 
 kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/addons/jaeger.yaml
 
-kubectl patch -n istio-system istiooperator/istiocontrolplane --type=merge -p '{"spec":{"meshConfig":{"defaultConfig":{"tracing":{}},"enableTracing":true},"values":{"global":{"proxy":{"logLevel": "info"}}}}}'
-kubectl patch -n istio-system istiooperator/istiocontrolplane --type=json -p '[{"op": "add", "path": "/spec/meshConfig/extensionProviders/-", "value": {"name": "jaeger-otel","opentelemetry":{"service":"jaeger-collector.istio-system.svc.cluster.local","port":4317}}}]'
+if [ "$ISTIO_INSTALL_SAIL" = true ]; then
+  kubectl patch -n istio-system istio/default --type=merge -p '{"spec": {"values": {"meshConfig":{"defaultConfig":{"tracing":{}},"enableTracing":true},"global":{"proxy":{"logLevel": "info"}}}}}'
+  kubectl patch -n istio-system istio/default --type=json -p '[{"op": "add", "path": "/spec/values/meshConfig/extensionProviders/-", "value": {"name": "jaeger-otel","opentelemetry":{"service":"jaeger-collector.istio-system.svc.cluster.local","port":4317}}}]'
+else
+  kubectl patch -n istio-system istiooperator/istiocontrolplane --type=merge -p '{"spec":{"meshConfig":{"defaultConfig":{"tracing":{}},"enableTracing":true},"values":{"global":{"proxy":{"logLevel": "info"}}}}}'
+  kubectl patch -n istio-system istiooperator/istiocontrolplane --type=json -p '[{"op": "add", "path": "/spec/meshConfig/extensionProviders/-", "value": {"name": "jaeger-otel","opentelemetry":{"service":"jaeger-collector.istio-system.svc.cluster.local","port":4317}}}]'
+fi
 
 kubectl apply -f - <<EOF
 apiVersion: telemetry.istio.io/v1alpha1
@@ -189,5 +194,4 @@ echo "Sleeping for 30s while waiting for everything to deploy+configure..."
 sleep 30
 kubectl scale --replicas=0 deployments/limitador-operator-controller-manager -n kuadrant-system
 kubectl wait --timeout=60s --for=condition=Available deployments/limitador-operator-controller-manager -n kuadrant-system
-kubectl patch -n kuadrant-system deployment/limitador-limitador --type=json -p '[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value": "quay.io/kuadrant/limitador:tracing-otel"}]'
 kubectl patch -n kuadrant-system deployment/limitador-limitador --type=json -p '[{"op": "replace", "path": "/spec/template/spec/containers/0/command", "value": ["limitador-server","--rate-limit-headers","DRAFT_VERSION_03","--limit-name-in-labels","--http-port","8080","--rls-port","8081","-vvv","--tracing-endpoint","rpc://jaeger-collector.istio-system.svc.cluster.local:4317","/home/limitador/etc/limitador-config.yaml","memory"]}]'
