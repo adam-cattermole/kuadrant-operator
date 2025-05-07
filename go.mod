@@ -3,6 +3,7 @@ module github.com/kuadrant/kuadrant-operator
 go 1.23.6
 
 require (
+	cel.dev/expr v0.19.1
 	github.com/cert-manager/cert-manager v1.16.2
 	github.com/elliotchance/orderedmap/v2 v2.2.0
 	github.com/envoyproxy/gateway v1.1.0
