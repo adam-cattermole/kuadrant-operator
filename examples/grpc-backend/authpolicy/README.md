@@ -7,7 +7,13 @@ Examples demonstrating how to secure gRPC services using Kuadrant's AuthPolicy a
 - [grpcurl](https://github.com/fullstorydev/grpcurl) - Command-line tool for interacting with gRPC servers
 - A Gateway must exist for the GRPCRoute to attach to. The GRPCRoute in this example references the `kuadrant-ingressgateway` Gateway in the `gateway-system` namespace, which is created by `make local-setup`.
 
-Deploy the grpcbin backend and GRPCRoute first:
+Deploy the Kuadrant resource:
+
+```bash
+kubectl apply -f examples/grpc-backend/kuadrant.yaml
+```
+
+Deploy the grpcbin backend and GRPCRoute:
 
 ```bash
 kubectl apply -f examples/grpc-backend/grpcbin.yaml
@@ -25,7 +31,6 @@ export GATEWAY_IP=$(kubectl get svc -n gateway-system kuadrant-ingressgateway-is
 ### Deploy
 
 ```bash
-kubectl apply -f examples/grpc-backend/authpolicy/kuadrant.yaml
 kubectl apply -f examples/grpc-backend/authpolicy/api-key-secret.yaml
 kubectl apply -f examples/grpc-backend/authpolicy/authpolicy.yaml
 ```
@@ -78,7 +83,6 @@ This example demonstrates using CEL predicates to selectively protect different 
 ### Deploy
 
 ```bash
-kubectl apply -f examples/grpc-backend/authpolicy/kuadrant.yaml
 kubectl apply -f examples/grpc-backend/authpolicy/api-key-secret.yaml
 kubectl apply -f examples/grpc-backend/authpolicy/admin-key-secret.yaml
 kubectl apply -f examples/grpc-backend/authpolicy/authpolicy-when.yaml
@@ -183,5 +187,5 @@ kubectl delete -f examples/grpc-backend/authpolicy/authpolicy.yaml
 kubectl delete -f examples/grpc-backend/authpolicy/authpolicy-when.yaml
 kubectl delete -f examples/grpc-backend/authpolicy/api-key-secret.yaml
 kubectl delete -f examples/grpc-backend/authpolicy/admin-key-secret.yaml
-kubectl delete -f examples/grpc-backend/authpolicy/kuadrant.yaml
+kubectl delete -f examples/grpc-backend/kuadrant.yaml
 ```
