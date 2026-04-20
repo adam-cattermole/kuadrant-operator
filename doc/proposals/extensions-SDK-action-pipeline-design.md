@@ -229,6 +229,8 @@ Two `ThreatPolicy` instances targeting the same Gateway both register `"checkThr
 
 #### New ActionType Field
 
+The wasm service definition gains a `messageTemplate` field — a JSON object where keys are proto field names and values are CEL expressions. The wasm-shim evaluates these expressions against the request context at request time to construct the gRPC request message (see [Message Template Processing](#message-template-processing) below).
+
 The wasm `Action` struct (`internal/wasm/types.go`) gains an explicit `ActionType` discriminator field. The wasm-shim dispatches based on the `ActionType` value, not by inspecting which fields are present (duck-typing). New fields are added for pipeline actions:
 
 - `ActionType` — one of `grpc_method`, `allow`, `add_headers`, `with_response_code`
@@ -252,6 +254,8 @@ services:
     timeout: 100ms
     grpcService: "threat.ThreatService"
     grpcMethod: "CheckThreatLevel"
+    messageTemplate:
+      values: "request.headers['phil']"
 
 actionSets:
   - name: "abc123-hash"
@@ -289,6 +293,18 @@ When a `GRPCMethodAction` is registered via `OnRequest`, the operator validates 
 
 This catches typos and schema mismatches at reconcile time rather than at request time in the wasm-shim.
 
+### Message Template Processing
+
+The `MessageTemplate` field on `ActionMethodConfig` defines how the wasm-shim constructs the gRPC request message at request time. The template is a JSON object where keys are proto field names and values are CEL expressions evaluated against the request context.
+
+In the Extension Author Usage example, `{"values": "request.headers['phil']"}` instructs the wasm-shim to set the `values` field of the `CheckThreatLevel` request message to the value of the `phil` request header.
+
+**Operator (registration time):** The operator parses the JSON and validates each value as a syntactically correct CEL expression. If Phase 2 ProtoCache has the method's input message descriptor available, the operator also validates that the template keys correspond to valid fields on the input message type. The validated template is stored in the `ActionMethodStore` alongside the method's service, cluster, and connection details.
+
+**Operator (reconciliation):** The reconciler includes the message template in the wasm service configuration, so the wasm-shim has access to it without a back-channel to the operator.
+
+**Wasm-shim (request time):** When processing a `grpc_method` action, the wasm-shim looks up the referenced service's `messageTemplate`, evaluates each CEL value against the current request context (headers, path, method, auth metadata), and constructs the protobuf request message using the evaluated values and the dynamic message schema obtained via Phase 2 gRPC reflection. The constructed message is sent to the upstream gRPC service, and the response is made available for `Intention` evaluation.
+
 ### Component Changes
 
 #### 1. ActionMethodStore (internal/extension/registry.go)
@@ -306,9 +322,10 @@ Index allocation is atomic per `(Policy, Phase)` pair — the store maintains a 
 **RegisterActionMethod handler:**
 - Validates `Name` is non-empty and unique for this policy
 - Validates `URL`, `Service`, `Method` are set
+- Validates `MessageTemplate` is valid JSON with syntactically correct CEL expression values; if the ProtoCache has the input message descriptor, validates that template keys match field names on the input message type
 - Performs gRPC dial reachability check (from Phase 1)
 - Triggers gRPC reflection and caches descriptors (from Phase 2)
-- Stores `ActionMethodEntry` in `ActionMethodStore`
+- Stores `ActionMethodEntry` (including validated message template) in `ActionMethodStore`
 - Triggers reconciliation
 
 **PipelineOnRequest handler:**
