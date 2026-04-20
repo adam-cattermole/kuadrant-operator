@@ -235,7 +235,6 @@ The wasm `Action` struct (`internal/wasm/types.go`) gains an explicit `ActionTyp
 
 - `ActionType` — one of `grpc_method`, `allow`, `add_headers`, `with_response_code`
 - `Intention` — CEL expression (for `grpc_method` and `allow`)
-- `ActionMethod` — registered method name (for `grpc_method`)
 - `HeadersToAdd` — CEL expression evaluating to a map of headers (for `add_headers`)
 - `NewResponseCode` — HTTP status code (for `with_response_code`)
 
@@ -267,7 +266,6 @@ actionSets:
         scope: request
         actionType: grpc_method
         predicates: ["request.headers['check_threat'] == '1'"]
-        actionMethod: checkThreatLevel
         intention: "checkThreatLevelResponse.HeatLevel == 5"
         sources: ["ThreatPolicy/default/my-threat-policy"]
 
