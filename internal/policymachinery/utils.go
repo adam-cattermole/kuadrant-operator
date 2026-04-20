@@ -9,6 +9,7 @@ import (
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -140,6 +141,17 @@ func (p *ParsedTopologyPath) GetRouteRuleName() string {
 		return string(p.GRPCRouteRule.Name)
 	}
 	return ""
+}
+
+// GetRoute returns the route (HTTPRoute or GRPCRoute) as metav1.Object.
+func (p *ParsedTopologyPath) GetRoute() metav1.Object {
+	if p.HTTPRoute != nil {
+		return p.HTTPRoute
+	}
+	if p.GRPCRoute != nil {
+		return p.GRPCRoute
+	}
+	return nil
 }
 
 // GetRouteRule returns the route rule as machinery.Object.

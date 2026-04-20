@@ -148,7 +148,7 @@ func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, path
 		logger.Error(err, "failed to parse request path", "pathID", pathID)
 		return
 	}
-	limitsNamespace := parsed.GetRouteNamespacedName().String()
+	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
 	limitRules := lo.Filter(lo.Entries(rules),
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
