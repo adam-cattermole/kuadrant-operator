@@ -69,7 +69,9 @@ func (r *EffectiveRateLimitPolicyReconciler) calculateEffectivePolicies(ctx cont
 	effectivePolicies := EffectiveRateLimitPolicies{}
 
 	// Combine HTTP and gRPC route rules
-	allRouteRules := append(httpRouteRules, grpcRouteRules...)
+	allRouteRules := make([]machinery.Targetable, 0, len(httpRouteRules)+len(grpcRouteRules))
+	allRouteRules = append(allRouteRules, httpRouteRules...)
+	allRouteRules = append(allRouteRules, grpcRouteRules...)
 
 	for _, gatewayClass := range gatewayClasses {
 		for _, routeRule := range allRouteRules {
