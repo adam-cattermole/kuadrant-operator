@@ -201,6 +201,10 @@ var _ = Describe("Upstream cluster EnvoyPatchPolicy controller", Serial, func() 
 				},
 				FailureMode: "deny",
 				Timeout:     "10s",
+			}, &descriptorpb.FileDescriptorSet{
+				File: []*descriptorpb.FileDescriptorProto{
+					{Name: proto.String("test.proto")},
+				},
 			})
 
 			// Trigger reconciliation by updating the route
@@ -224,9 +228,18 @@ var _ = Describe("Upstream cluster EnvoyPatchPolicy controller", Serial, func() 
 				g.Expect(testClient().Get(ctx, patchKey, patch)).NotTo(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
-			// Verify the patch contains the correct cluster configuration
-			Expect(patch.Spec.JSONPatches).To(HaveLen(1))
-			Expect(patch.Spec.JSONPatches[0].Name).To(Equal("route-upstream-cluster"))
+			// Verify the patch contains both upstream cluster and descriptor service cluster
+			Expect(patch.Spec.JSONPatches).To(HaveLen(2))
+
+			// Extract cluster names from patches
+			var clusterNames []string
+			for _, jsonPatch := range patch.Spec.JSONPatches {
+				clusterNames = append(clusterNames, jsonPatch.Name)
+			}
+
+			// Verify both clusters are present
+			Expect(clusterNames).To(ContainElement("route-upstream-cluster"))
+			Expect(clusterNames).To(ContainElement("kuadrant-operator-grpc"))
 
 			// Clean up
 			store.ClearPolicyData(policyID)

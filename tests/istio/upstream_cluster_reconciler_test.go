@@ -191,6 +191,10 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 				},
 				FailureMode: "deny",
 				Timeout:     "10s",
+			}, &descriptorpb.FileDescriptorSet{
+				File: []*descriptorpb.FileDescriptorProto{
+					{Name: proto.String("test.proto")},
+				},
 			})
 
 			// Trigger reconciliation by updating the route
@@ -214,13 +218,22 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 				g.Expect(testClient().Get(ctx, efKey, existingEF)).NotTo(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
-			// Verify the patch contains the correct cluster configuration
-			Expect(existingEF.Spec.ConfigPatches).To(HaveLen(1))
-			patchValueRaw, err := json.Marshal(existingEF.Spec.ConfigPatches[0].Patch.Value)
-			Expect(err).ToNot(HaveOccurred())
-			var patchValue map[string]any
-			Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
-			Expect(patchValue["name"]).To(Equal("route-upstream-cluster"))
+			// Verify the patches contain both upstream cluster and descriptor service cluster
+			Expect(existingEF.Spec.ConfigPatches).To(HaveLen(2))
+
+			// Extract cluster names from patches
+			var clusterNames []string
+			for _, patch := range existingEF.Spec.ConfigPatches {
+				patchValueRaw, err := json.Marshal(patch.Patch.Value)
+				Expect(err).ToNot(HaveOccurred())
+				var patchValue map[string]any
+				Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
+				clusterNames = append(clusterNames, patchValue["name"].(string))
+			}
+
+			// Verify both clusters are present
+			Expect(clusterNames).To(ContainElement("route-upstream-cluster"))
+			Expect(clusterNames).To(ContainElement("kuadrant-operator-grpc"))
 
 			// Clean up
 			store.ClearPolicyData(policyID)
