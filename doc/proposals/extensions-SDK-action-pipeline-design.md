@@ -254,7 +254,9 @@ services:
     grpcService: "threat.ThreatService"
     grpcMethod: "CheckThreatLevel"
     messageTemplate:
-      values: "request.headers['phil']"
+      uri: "request.path"
+      is_authenticated: "has(auth.identity)"
+      source_ip: "source.address"
 
 actionSets:
   - name: "abc123-hash"
@@ -295,7 +297,7 @@ This catches typos and schema mismatches at reconcile time rather than at reques
 
 The `MessageTemplate` field on `ActionMethodConfig` defines how the wasm-shim constructs the gRPC request message at request time. The template is a JSON object where keys are proto field names and values are CEL expressions evaluated against the request context.
 
-In the Extension Author Usage example, `{"values": "request.headers['phil']"}` instructs the wasm-shim to set the `values` field of the `CheckThreatLevel` request message to the value of the `phil` request header.
+In the Extension Author Usage example, `{"uri": "request.path", "is_authenticated": "has(auth.identity)", "source_ip": "source.address"}` instructs the wasm-shim to populate the `uri`, `is_authenticated`, and `source_ip` fields of the `CheckThreatLevel` request message using the corresponding CEL expressions. Proto fields omitted from the template retain their protobuf default values.
 
 **Operator (registration time):** The operator parses the JSON and validates each value as a syntactically correct CEL expression. If Phase 2 ProtoCache has the method's input message descriptor available, the operator also validates that the template keys correspond to valid fields on the input message type. The validated template is stored in the `ActionMethodStore` alongside the method's service, cluster, and connection details.
 
@@ -369,7 +371,7 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
         URL:             threatServiceURL,
         Service:         "threat.ThreatService",
         Method:          "CheckThreatLevel",
-        MessageTemplate: `{"values": "request.headers['phil']"}`,
+        MessageTemplate: `{"uri": "request.path", "is_authenticated": "has(auth.identity)", "source_ip": "source.address"}`,
     })
     if errors.Is(err, types.ErrUpstreamUnreachable) {
         return calculateErrorStatus(pol, err), err
