@@ -496,3 +496,193 @@ func TestGetServiceDescriptors_MissingService(t *testing.T) {
 		t.Fatal("Expected error for missing service")
 	}
 }
+
+func TestRegisterUpstreamMethod_MultipleMethodsSamePolicy(t *testing.T) {
+	svc := newTestExtensionService()
+
+	method1Req := &extpb.RegisterUpstreamMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+
+	method2Req := &extpb.RegisterUpstreamMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "AnotherMethod",
+	}
+
+	_, err := svc.RegisterUpstreamMethod(context.Background(), method1Req)
+	if err != nil {
+		t.Fatalf("Failed to register first method: %v", err)
+	}
+
+	_, err = svc.RegisterUpstreamMethod(context.Background(), method2Req)
+	if err != nil {
+		t.Fatalf("Failed to register second method: %v", err)
+	}
+
+	// Verify both methods are stored independently
+	key1 := RegisteredUpstreamKey{
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+	entry1, exists1 := svc.registeredData.GetUpstream(key1)
+	if !exists1 {
+		t.Fatal("Expected first method to be stored")
+	}
+
+	key2 := RegisteredUpstreamKey{
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "AnotherMethod",
+	}
+	entry2, exists2 := svc.registeredData.GetUpstream(key2)
+	if !exists2 {
+		t.Fatal("Expected second method to be stored")
+	}
+
+	// Verify both share the same cluster name
+	if entry1.ClusterName != entry2.ClusterName {
+		t.Errorf("Expected same cluster name, got %q and %q", entry1.ClusterName, entry2.ClusterName)
+	}
+
+	// Verify both share the same proto cache entry
+	cacheKey := ProtoCacheKey{
+		ClusterName: entry1.ClusterName,
+		Service:     "example.v1.ExampleService",
+	}
+	_, exists := svc.registeredData.GetProtoDescriptor(cacheKey)
+	if !exists {
+		t.Fatal("Expected shared proto cache entry to exist")
+	}
+}
+
+func TestRegisterUpstreamMethod_ReregistrationIdempotent(t *testing.T) {
+	svc := newTestExtensionService()
+
+	notifyCount := 0
+	svc.changeNotifier = func(reason string) error {
+		notifyCount++
+		return nil
+	}
+
+	req := validRequest()
+
+	// First registration
+	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+	if err != nil {
+		t.Fatalf("First registration failed: %v", err)
+	}
+
+	if notifyCount != 1 {
+		t.Errorf("Expected 1 notification after first registration, got %d", notifyCount)
+	}
+
+	// Re-register the same method
+	_, err = svc.RegisterUpstreamMethod(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Re-registration failed: %v", err)
+	}
+
+	if notifyCount != 2 {
+		t.Errorf("Expected 2 notifications after re-registration, got %d", notifyCount)
+	}
+
+	// Verify only one entry exists (not duplicated)
+	key := RegisteredUpstreamKey{
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+	upstreams := svc.registeredData.GetAllUpstreams()
+	count := 0
+	for k := range upstreams {
+		if k == key {
+			count++
+		}
+	}
+
+	if count != 1 {
+		t.Errorf("Expected exactly 1 entry in upstreams map, found %d", count)
+	}
+}
+
+func TestRegisterUpstreamMethod_PartialFailure(t *testing.T) {
+	svc := newTestExtensionService()
+
+	notifyCount := 0
+	svc.changeNotifier = func(reason string) error {
+		notifyCount++
+		return nil
+	}
+
+	// First registration succeeds
+	validReq := &extpb.RegisterUpstreamMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+
+	_, err := svc.RegisterUpstreamMethod(context.Background(), validReq)
+	if err != nil {
+		t.Fatalf("First registration should succeed, got error: %v", err)
+	}
+
+	if notifyCount != 1 {
+		t.Errorf("Expected 1 notification after first registration, got %d", notifyCount)
+	}
+
+	// Second registration fails (invalid method)
+	invalidReq := &extpb.RegisterUpstreamMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "NonExistentMethod",
+	}
+
+	_, err = svc.RegisterUpstreamMethod(context.Background(), invalidReq)
+	if err == nil {
+		t.Fatal("Second registration should fail for non-existent method")
+	}
+
+	// Verify notifier was NOT called for the failed registration
+	if notifyCount != 1 {
+		t.Errorf("Expected notifier to fire only once (successful registration only), got %d", notifyCount)
+	}
+
+	// Verify first registration is still intact
+	validKey := RegisteredUpstreamKey{
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+	_, exists := svc.registeredData.GetUpstream(validKey)
+	if !exists {
+		t.Fatal("First registration should still exist after second registration failed")
+	}
+
+	// Verify failed registration left no partial entry
+	invalidKey := RegisteredUpstreamKey{
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "NonExistentMethod",
+	}
+	_, exists = svc.registeredData.GetUpstream(invalidKey)
+	if exists {
+		t.Fatal("Failed registration should not leave any entry in storage")
+	}
+}
