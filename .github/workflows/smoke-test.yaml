@@ -23,7 +23,7 @@ jobs:
 
   smoke-tests:
     name: Smoke Tests
-    if: needs.pre-job.outputs.should_skip != 'true'
+    if: needs.pre-job.outputs.should_skip != 'true' && github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     needs: pre-job
     runs-on: ubuntu-latest
     defaults:
