@@ -16,7 +16,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -62,7 +61,7 @@ func GetLimitadorFromTopology(topology *machinery.Topology) *limitadorv1alpha1.L
 	return limitador
 }
 
-func LimitsNamespaceFromRoute(route *gatewayapiv1.HTTPRoute) string {
+func LimitsNamespaceFromRoute(route metav1.Object) string {
 	return k8stypes.NamespacedName{Name: route.GetName(), Namespace: route.GetNamespace()}.String()
 }
 
@@ -325,8 +324,12 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 	rules := effectivePolicy.Spec.Rules()
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
 
-	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
-	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
+	if err != nil {
+		// If the path is invalid, return empty actions
+		return []wasm.Action{}
+	}
+	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
 	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
@@ -376,8 +379,12 @@ func buildWasmActionsForAnyRateLimit(
 ) []wasm.Action {
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
 
-	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
-	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
+	if err != nil {
+		// If the path is invalid, return empty actions
+		return []wasm.Action{}
+	}
+	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
 	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
